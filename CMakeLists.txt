@@ -7,8 +7,9 @@ enable_language(CUDA)
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CUDA_STANDARD 17)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -fno-exceptions -O3 -s -flto")
+set(CMAKE_CUDA_ARCHITECTURES 61)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -fno-exceptions -O3 -flto")
 #add_definitions(-DRUN_CPU)
 
-add_executable(test test.cpp kernel11.cu)
+add_executable(test test.cpp kernel.cu)
 target_link_libraries(test PRIVATE CUDA::cublas)

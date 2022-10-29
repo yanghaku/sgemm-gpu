@@ -1,4 +1,4 @@
-#include "kernel11.h"
+#include "kernel.h"
 #include "utils.h"
 #include <cublas_v2.h>
 
@@ -24,7 +24,7 @@ double gemm_cublas(int TA, int TB, size_t M, size_t N, size_t K, float ALPHA, fl
 }
 
 constexpr auto cpu_check_eps = 1e-2;
-constexpr auto gpu_check_eps = 1e-6;
+constexpr auto gpu_check_eps = 1e-4;
 
 void do_test(int TA, int TB, size_t m, size_t k, size_t n) {
     std::cerr << "Test FLOP = " << 2 * m * k * n << std::endl;
@@ -42,7 +42,7 @@ void do_test(int TA, int TB, size_t m, size_t k, size_t n) {
 
     auto a = new float[m * k];
     auto b = new float[k * n];
-    auto out_c = new float[k * n];
+    auto out_c = new float[m * n];
     randomize_matrix(a, m * k);
     randomize_matrix(b, k * n);
     auto gpu_a = create_cuda_matrix(a, m * k);
@@ -73,7 +73,7 @@ void do_test(int TA, int TB, size_t m, size_t k, size_t n) {
     // compute with kernel11
     CUDA_CALL(cudaMemset(gpu_c, 0, bytes));
     CUDA_CALL(cudaDeviceSynchronize());
-    auto time_k11 = gemm_k11(TA, TB, m, n, k, alpha, a, lda, b, ldb, beta, out_c, n);
+    auto time_k11 = gemm_gpu(TA, TB, m, n, k, alpha, gpu_a, lda, gpu_b, ldb, beta, gpu_c, n);
     std::cerr << "Time kernel11 = " << time_k11 << " ms" << std::endl;
 
     CUDA_CALL(cudaMemcpy(out_c, gpu_c, bytes, cudaMemcpyDeviceToHost));
@@ -100,7 +100,13 @@ int main() {
     CUDA_CALL(cudaSetDevice(0));
     std::cout.precision(17);
 
-    do_test(0, 0, 64, 64, 64);
+    do_test(0, 0, 128, 8, 128);
+    do_test(0, 0, 128, 1024, 128);
+    do_test(0, 0, 256, 128, 128);
+    do_test(0, 0, 128, 128, 256);
+    do_test(0, 0, 1024, 1024, 1024);
+    do_test(0, 0, 2048, 2048, 2048);
+    do_test(0, 0, 4096, 4096, 4096);
     //    do_test(0, 0, 64, 2916, 363);
     //    do_test(0, 0, 192, 729, 1600);
     //    do_test(0, 0, 384, 196, 1728);
