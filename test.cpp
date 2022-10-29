@@ -28,6 +28,7 @@ constexpr auto gpu_check_eps = 1e-4;
 
 void do_test(int TA, int TB, size_t m, size_t k, size_t n) {
     std::cerr << "Test FLOP = " << 2 * m * k * n << std::endl;
+    std::cerr << "M = " << m << "; K = " << k << "; N = " << n << std::endl;
     SET_TIME(time_0)
     std::default_random_engine g(TO_SEED(time_0));
     std::uniform_real_distribution<float> d(-1, 1);
@@ -52,7 +53,7 @@ void do_test(int TA, int TB, size_t m, size_t k, size_t n) {
     // compute with cublas
     auto cublas_out_c = new float[m * n];
     auto time_cublas = gemm_cublas(TA, TB, m, n, k, alpha, gpu_a, lda, gpu_b, ldb, beta, gpu_c, n);
-    std::cerr << "Time cublas = " << time_cublas << " ms" << std::endl;
+    std::cerr << "Time cublas = \t" << time_cublas << " ms" << std::endl;
     CUDA_CALL(cudaMemcpy(cublas_out_c, gpu_c, bytes, cudaMemcpyDeviceToHost));
     CUDA_CALL(cudaDeviceSynchronize());
 
@@ -60,7 +61,7 @@ void do_test(int TA, int TB, size_t m, size_t k, size_t n) {
 #ifdef RUN_CPU
     memset(out_c, 0, bytes);
     auto time_cpu = gemm_cpu(TA, TB, m, n, k, alpha, a, lda, b, ldb, beta, out_c, n);
-    std::cerr << "Time CPU = " << time_cpu << " ms" << std::endl;
+    std::cerr << "Time CPU = \t" << time_cpu << " ms" << std::endl;
 
     auto cpu_err_id = check_matrix(cublas_out_c, out_c, count, cpu_check_eps);
     if (cpu_err_id != count) {
@@ -70,19 +71,19 @@ void do_test(int TA, int TB, size_t m, size_t k, size_t n) {
 
 #endif // RUN_CPU
 
-    // compute with kernel11
+    // compute with kernel
     CUDA_CALL(cudaMemset(gpu_c, 0, bytes));
     CUDA_CALL(cudaDeviceSynchronize());
-    auto time_k11 = gemm_gpu(TA, TB, m, n, k, alpha, gpu_a, lda, gpu_b, ldb, beta, gpu_c, n);
-    std::cerr << "Time kernel11 = " << time_k11 << " ms" << std::endl;
+    auto time_my_kernel = gemm_gpu(TA, TB, m, n, k, alpha, gpu_a, lda, gpu_b, ldb, beta, gpu_c, n);
+    std::cerr << "Time my = \t" << time_my_kernel << " ms" << std::endl;
 
     CUDA_CALL(cudaMemcpy(out_c, gpu_c, bytes, cudaMemcpyDeviceToHost));
     CUDA_CALL(cudaDeviceSynchronize());
 
-    auto k11_err_id = check_matrix(cublas_out_c, out_c, count, gpu_check_eps);
-    if (k11_err_id != count) {
-        std::cerr << "Error: expect my_c[" << k11_err_id << "] = " << std::fixed << cublas_out_c[k11_err_id]
-                  << " but get " << std::fixed << out_c[k11_err_id] << std::endl;
+    auto my_kernel_err_id = check_matrix(cublas_out_c, out_c, count, gpu_check_eps);
+    if (my_kernel_err_id != count) {
+        std::cerr << "Error: expect my_c[" << my_kernel_err_id << "] = " << std::fixed << cublas_out_c[my_kernel_err_id]
+                  << " but get " << std::fixed << out_c[my_kernel_err_id] << std::endl;
     }
 
     // free all

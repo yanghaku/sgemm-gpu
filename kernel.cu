@@ -2,6 +2,12 @@
 #include "utils.h"
 #include <cassert>
 
+#ifdef _MSC_VER
+#define always_inline __forceinline
+#else
+#define always_inline __always_inline
+#endif // _MSC_VER
+
 #define IDX2F(row, col, ld) ((row) * (ld) + (col))
 #define Matrix_addr(P, row, col, ld) (P + IDX2F(row, col, ld))
 
@@ -176,9 +182,9 @@ __global__ __launch_bounds__(256) void sgemm_nn_128(float alpha, const float *A_
 
 /// M, K=lda, N=ldb=ldc
 /// assert(lda%8==0 && lda>=8 && ldb%4==0 )
-static __host__ __always_inline void sgemm_nn_128_host(size_t M, size_t N, size_t K, float alpha, float *A_gpu,
-                                                       size_t lda, float *B_gpu, size_t ldb, float beta, float *C_gpu,
-                                                       size_t ldc) {
+static __host__ always_inline void sgemm_nn_128_host(size_t M, size_t N, size_t K, float alpha, float *A_gpu,
+                                                     size_t lda, float *B_gpu, size_t ldb, float beta, float *C_gpu,
+                                                     size_t ldc) {
     assert(K == lda && ldc == ldb && N == ldc && (lda % 8 == 0) && lda >= 8 && ldb % 4 == 0);
     dim3 grid_dim((M + 127) / 128, (N + 127) / 128); // todo: avoid ceil
     sgemm_nn_128<<<grid_dim, 256>>>(alpha, A_gpu, lda, B_gpu, beta, C_gpu, ldc);
