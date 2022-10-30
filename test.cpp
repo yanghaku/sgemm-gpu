@@ -1,4 +1,4 @@
-#include "kernel.h"
+#include "sgemm_gpu.h"
 #include "utils.h"
 #include <cublas_v2.h>
 
@@ -20,6 +20,19 @@ double gemm_cublas(int TA, int TB, size_t M, size_t N, size_t K, float ALPHA, fl
     SET_TIME(t1)
 
     CUBLAS_CALL(cublasDestroy(handle));
+    return GET_DURING(t1, t0);
+}
+
+double call_gemm_gpu(int TA, int TB, size_t M, size_t N, size_t K, float ALPHA, float *A_gpu, size_t lda, float *B_gpu,
+                     size_t ldb, float BETA, float *C_gpu, size_t ldc) {
+
+    CUDA_CALL(cudaDeviceSynchronize());
+
+    SET_TIME(t0)
+    sgemm_gpu(TA, TB, (int)M, (int)N, (int)K, ALPHA, A_gpu, (int)lda, B_gpu, (int)ldb, BETA, C_gpu, (int)ldc);
+    CUDA_CALL(cudaDeviceSynchronize());
+
+    SET_TIME(t1)
     return GET_DURING(t1, t0);
 }
 
@@ -74,7 +87,7 @@ void do_test(int TA, int TB, size_t m, size_t k, size_t n) {
     // compute with kernel
     CUDA_CALL(cudaMemset(gpu_c, 0, bytes));
     CUDA_CALL(cudaDeviceSynchronize());
-    auto time_my_kernel = gemm_gpu(TA, TB, m, n, k, alpha, gpu_a, lda, gpu_b, ldb, beta, gpu_c, n);
+    auto time_my_kernel = call_gemm_gpu(TA, TB, m, n, k, alpha, gpu_a, lda, gpu_b, ldb, beta, gpu_c, n);
     std::cerr << "Time my = \t" << time_my_kernel << " ms" << std::endl;
 
     CUDA_CALL(cudaMemcpy(out_c, gpu_c, bytes, cudaMemcpyDeviceToHost));
@@ -84,6 +97,7 @@ void do_test(int TA, int TB, size_t m, size_t k, size_t n) {
     if (my_kernel_err_id != count) {
         std::cerr << "Error: expect my_c[" << my_kernel_err_id << "] = " << std::fixed << cublas_out_c[my_kernel_err_id]
                   << " but get " << std::fixed << out_c[my_kernel_err_id] << std::endl;
+        std::exit(-1);
     }
 
     // free all
@@ -101,9 +115,11 @@ int main() {
     CUDA_CALL(cudaSetDevice(0));
     std::cout.precision(17);
 
+    do_test(0, 0, 1024, 1, 512);
+    do_test(0, 0, 256, 5, 512);
     do_test(0, 0, 128, 8, 128);
-    do_test(0, 0, 128, 1024, 128);
-    do_test(0, 0, 256, 128, 128);
+    do_test(0, 0, 256, 12, 512);
+    do_test(0, 0, 256, 1028, 128);
     do_test(0, 0, 128, 128, 256);
     do_test(0, 0, 1024, 1024, 1024);
     do_test(0, 0, 2048, 2048, 2048);

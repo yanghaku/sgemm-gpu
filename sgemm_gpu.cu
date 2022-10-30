@@ -1,5 +1,4 @@
-#include "kernel.h"
-#include "utils.h"
+#include "sgemm_gpu.h"
 #include <cassert>
 
 #ifdef _MSC_VER
@@ -38,12 +37,13 @@
         f_v.w = alpha * f_v1.w + beta * f_v2.w;                                                                        \
     } while (0)
 
-/// M, K=lda, N=ldb=ldc
-/// assert(lda%8==0 && lda>=8 && ldb%4==0 )
-__global__ __launch_bounds__(256) void sgemm_nn_128(float alpha, const float *A_gpu, unsigned int lda,
-                                                    const float *B_gpu, float beta, float *C_gpu, unsigned int ldc) {
+/// assert(ldb%4==0 && (lda%4==0 || K<8) )
+__global__ __launch_bounds__(256) void sgemm_nn_128x128(unsigned int K, float alpha, const float *A_gpu,
+                                                        unsigned int lda, const float *B_gpu, unsigned int ldb,
+                                                        float beta, float *C_gpu, unsigned int ldc) {
     __shared__ float shared_a[256 * 4 * 2];
     __shared__ float shared_b[256 * 4 * 2];
+    float *ptr_shared_a, *ptr_shared_b;
     float4 A_value1, A_value2, B_value1, B_value2, C_values[16], C_res[16];
     memset(C_res, 0, sizeof(C_res));
 
@@ -69,29 +69,93 @@ __global__ __launch_bounds__(256) void sgemm_nn_128(float alpha, const float *A_
 
     // change point to sub matrix
     A_gpu += _tmp_bx_mul_128 * lda + IDX2F(row_a, col_a, lda);
-    B_gpu += _tmp_by_mul_128 + IDX2F(row_b, col_b, ldc);
+    B_gpu += _tmp_by_mul_128 + IDX2F(row_b, col_b, ldb);
     C_gpu += _tmp_bx_mul_128 * ldc + _tmp_by_mul_128;
 
-    auto shared_a_index = ((tx >> 3) << 5) + ((tx & 0x1) << 4) + (row_b >> 1); // tx/8*32 + tx%2*16 + tx%8/2
-    auto batch_nums = lda >> 3;
+    auto ldb_mul_8 = ldb << 3;
+    auto batch_nums = K >> 3;
     auto batch_i = 1;
-    auto ldc_mul_8 = ldc << 3;
+    if (batch_nums > 0) {
+        while (true) {
+            auto _tmp_global_a = float4_val_ref(A_gpu);
+            auto _tmp_global_b = float4_val_ref(B_gpu);
 
-    while (true) {
-        auto _tmp_shared_buf_offset = (batch_i & 1) << 10;
-        auto ptr_shared_a = shared_a + _tmp_shared_buf_offset;
-        auto ptr_shared_b = shared_b + _tmp_shared_buf_offset;
-        // every thread load the corresponding value from global matrix to shared memory and sync
-        auto _tmp_global_a = float4_val_ref(A_gpu);
-        ptr_shared_a[shared_a_index] = _tmp_global_a.x;
-        ptr_shared_a[shared_a_index + 4] = _tmp_global_a.y;
-        ptr_shared_a[shared_a_index + 8] = _tmp_global_a.z;
-        ptr_shared_a[shared_a_index + 12] = _tmp_global_a.w;
-        float4_ptr(ptr_shared_b)[tx] = float4_val_ref(B_gpu);
-        __syncthreads();
+            auto _tmp_shared_buf_offset = (batch_i & 1) << 10;
+            ptr_shared_a = shared_a + _tmp_shared_buf_offset;
+            ptr_shared_b = shared_b + _tmp_shared_buf_offset;
+            // every thread load the corresponding value from global matrix to shared memory and sync
+            auto shared_a_index = ((tx >> 3) << 5) + ((tx & 0x1) << 4) + (row_b >> 1); // tx/8*32 + tx%2*16 + tx%8/2
+            ptr_shared_a[shared_a_index] = _tmp_global_a.x;
+            ptr_shared_a[shared_a_index + 4] = _tmp_global_a.y;
+            ptr_shared_a[shared_a_index + 8] = _tmp_global_a.z;
+            ptr_shared_a[shared_a_index + 12] = _tmp_global_a.w;
+            float4_ptr(ptr_shared_b)[tx] = _tmp_global_b;
+            __syncthreads();
 
 #pragma unroll
-        for (auto _i = 0; _i < 8; ++_i) {
+            for (auto _i = 0; _i < 8; ++_i) {
+                // load from shared memory
+                float4_load(A_value1, float4_ptr(ptr_shared_a) + (row_c << 1) + _i);
+                float4_load(A_value2, float4_ptr(ptr_shared_a) + ((row_c << 1) + 8) + _i);
+                float4_load(B_value1, float4_ptr(ptr_shared_b) + (col_c << 1) + _i);
+                float4_load(B_value2, float4_ptr(ptr_shared_b) + ((col_c << 1) + 8) + _i);
+
+                float4_add_mul(C_res[0], B_value1, A_value1.x);
+                float4_add_mul(C_res[1], B_value2, A_value1.x);
+                float4_add_mul(C_res[2], B_value1, A_value1.y);
+                float4_add_mul(C_res[3], B_value2, A_value1.y);
+                float4_add_mul(C_res[4], B_value1, A_value1.z);
+                float4_add_mul(C_res[5], B_value2, A_value1.z);
+                float4_add_mul(C_res[6], B_value1, A_value1.w);
+                float4_add_mul(C_res[7], B_value2, A_value1.w);
+                float4_add_mul(C_res[8], B_value1, A_value2.x);
+                float4_add_mul(C_res[9], B_value2, A_value2.x);
+                float4_add_mul(C_res[10], B_value1, A_value2.y);
+                float4_add_mul(C_res[11], B_value2, A_value2.y);
+                float4_add_mul(C_res[12], B_value1, A_value2.z);
+                float4_add_mul(C_res[13], B_value2, A_value2.z);
+                float4_add_mul(C_res[14], B_value1, A_value2.w);
+                float4_add_mul(C_res[15], B_value2, A_value2.w);
+            }
+
+            if (batch_i == batch_nums) {
+                break;
+            }
+            // point to next sub matrix
+            A_gpu += 8;
+            B_gpu += ldb_mul_8; // 8 * ldb
+            ++batch_i;
+        }
+    }
+
+    auto rest_nums = K & 0x7; // K%8
+    // unlikely(rest_nums > 0)
+    if (rest_nums > 0) {
+        if (batch_nums > 0) {
+            A_gpu += 8;
+            B_gpu += ldb_mul_8; // 8 * ldb
+            auto _tmp_shared_buf_offset = ((batch_i + 1) & 1) << 10;
+            ptr_shared_a = shared_a + _tmp_shared_buf_offset;
+            ptr_shared_b = shared_b + _tmp_shared_buf_offset;
+        } else {
+            ptr_shared_a = shared_a;
+            ptr_shared_b = shared_b;
+        }
+
+        // load the corresponding value from global matrix to shared memory and sync
+        if (row_b < rest_nums) { // if (tx%8 < rest_nums)
+            A_gpu = A_gpu - IDX2F(row_a, col_a, lda) + IDX2F(((tx >> 3) << 2), row_b, lda);
+            // use A_value1 as the tmp value;
+            A_value1.x = *A_gpu;
+            A_value1.y = *(A_gpu + lda);
+            A_value1.z = *(A_gpu + (lda << 1));
+            A_value1.w = *(A_gpu + (lda << 1) + lda);
+            float4_ptr(ptr_shared_a)[tx] = A_value1;
+            float4_ptr(ptr_shared_b)[tx] = float4_val_ref(B_gpu);
+        }
+        __syncthreads();
+
+        for (auto _i = 0; _i < rest_nums; ++_i) {
             // load from shared memory
             float4_load(A_value1, float4_ptr(ptr_shared_a) + (row_c << 1) + _i);
             float4_load(A_value2, float4_ptr(ptr_shared_a) + ((row_c << 1) + 8) + _i);
@@ -115,14 +179,6 @@ __global__ __launch_bounds__(256) void sgemm_nn_128(float alpha, const float *A_
             float4_add_mul(C_res[14], B_value1, A_value2.w);
             float4_add_mul(C_res[15], B_value2, A_value2.w);
         }
-
-        if (batch_i == batch_nums) {
-            break;
-        }
-        // point to next sub matrix
-        A_gpu += 8;
-        B_gpu += ldc_mul_8; // 8 * ldb
-        ++batch_i;
     }
 
     // load the value of origin C from global matrix
@@ -180,26 +236,38 @@ __global__ __launch_bounds__(256) void sgemm_nn_128(float alpha, const float *A_
     float4_store(C_res[15], Matrix_addr(C_gpu, row_c + 7, col_c + 4, ldc));
 }
 
-/// M, K=lda, N=ldb=ldc
-/// assert(lda%8==0 && lda>=8 && ldb%4==0 )
-static __host__ always_inline void sgemm_nn_128_host(size_t M, size_t N, size_t K, float alpha, float *A_gpu,
-                                                     size_t lda, float *B_gpu, size_t ldb, float beta, float *C_gpu,
-                                                     size_t ldc) {
-    assert(K == lda && ldc == ldb && N == ldc && (lda % 8 == 0) && lda >= 8 && ldb % 4 == 0);
-    dim3 grid_dim((M + 127) / 128, (N + 127) / 128); // todo: avoid ceil
-    sgemm_nn_128<<<grid_dim, 256>>>(alpha, A_gpu, lda, B_gpu, beta, C_gpu, ldc);
+static __host__ always_inline void sgemm_nn_host(size_t M, size_t N, size_t K, float alpha, float *A_gpu, size_t lda,
+                                                 float *B_gpu, size_t ldb, float beta, float *C_gpu, size_t ldc) {
+
+    dim3 grid_dim(M >> 7, N >> 7);
+
+    if (grid_dim.x > 0 && grid_dim.y > 0) {
+        if (((ldb & 0x3) == 0) && (((lda & 0x3) == 0) || K < 8)) {
+            return sgemm_nn_128x128<<<grid_dim, 256>>>(K, alpha, A_gpu, lda, B_gpu, ldb, beta, C_gpu, ldc);
+        }
+    }
+    assert(0);
 }
 
-__host__ double gemm_gpu(int TA, int TB, size_t M, size_t N, size_t K, float ALPHA, float *A_gpu, size_t lda,
-                         float *B_gpu, size_t ldb, float BETA, float *C_gpu, size_t ldc) {
+static __host__ always_inline void sgemm_tn_host(size_t M, size_t N, size_t K, float alpha, float *A_gpu, size_t lda,
+                                                 float *B_gpu, size_t ldb, float beta, float *C_gpu, size_t ldc) {
+}
 
-    CUDA_CALL(cudaDeviceSynchronize());
+static __host__ always_inline void sgemm_nt_host(size_t M, size_t N, size_t K, float alpha, float *A_gpu, size_t lda,
+                                                 float *B_gpu, size_t ldb, float beta, float *C_gpu, size_t ldc) {
+}
 
-    SET_TIME(t0)
+void sgemm_gpu(int TA, int TB, int M, int N, int K, float ALPHA, float *A_gpu, int lda, float *B_gpu, int ldb,
+               float BETA, float *C_gpu, int ldc) {
+    assert(M > 0 && N > 0 && K > 0 && lda > 0 && ldb > 0 && ldc > 0);
 
-    sgemm_nn_128_host(M, N, K, ALPHA, A_gpu, lda, B_gpu, ldb, BETA, C_gpu, ldc);
-    CUDA_CALL(cudaDeviceSynchronize());
-
-    SET_TIME(t1)
-    return GET_DURING(t1, t0);
+    if (!TA && !TB) {
+        sgemm_nn_host(M, N, K, ALPHA, A_gpu, lda, B_gpu, ldb, BETA, C_gpu, ldc);
+    } else if (TA && !TB) {
+        sgemm_tn_host(M, N, K, ALPHA, A_gpu, lda, B_gpu, ldb, BETA, C_gpu, ldc);
+    } else if (!TA) {
+        sgemm_nt_host(M, N, K, ALPHA, A_gpu, lda, B_gpu, ldb, BETA, C_gpu, ldc);
+    } else {
+        assert(0 && "Not implemented");
+    }
 }
