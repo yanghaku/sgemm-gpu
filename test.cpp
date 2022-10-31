@@ -94,6 +94,11 @@ void do_test(int TA, int TB, size_t m, size_t k, size_t n) {
     CUDA_CALL(cudaDeviceSynchronize());
 
     auto my_kernel_err_id = check_matrix(cublas_out_c, out_c, count, gpu_check_eps);
+    for (auto i = 0; i < count; ++i) {
+        if (fabs(cublas_out_c[i] - out_c[i]) > gpu_check_eps) {
+            std::cerr << i << " " << i / n << "," << i % n << std::endl;
+        }
+    }
     if (my_kernel_err_id != count) {
         std::cerr << "Error: expect my_c[" << my_kernel_err_id << "] = " << std::fixed << cublas_out_c[my_kernel_err_id]
                   << " but get " << std::fixed << out_c[my_kernel_err_id] << std::endl;
@@ -115,13 +120,17 @@ int main() {
     CUDA_CALL(cudaSetDevice(0));
     std::cout.precision(17);
 
+    do_test(0, 0, 32, 1, 32);
+    do_test(0, 0, 512, 5, 64);
+    do_test(0, 0, 1024, 8, 32);
+    do_test(0, 0, 64, 68, 512);
     do_test(0, 0, 1024, 1, 512);
     do_test(0, 0, 256, 5, 512);
     do_test(0, 0, 128, 8, 128);
     do_test(0, 0, 256, 12, 512);
     do_test(0, 0, 256, 1028, 128);
-    do_test(0, 0, 128, 128, 256);
-    do_test(0, 0, 1024, 1024, 1024);
+    do_test(0, 0, 128, 128, 256 + 64 + 32);
+    do_test(0, 0, 1024 + 64, 1024, 1024);
     do_test(0, 0, 2048, 2048, 2048);
     do_test(0, 0, 4096, 4096, 4096);
     //    do_test(0, 0, 64, 2916, 363);
