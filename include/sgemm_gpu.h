@@ -1,5 +1,5 @@
-#ifndef SGEMM_GPU_HEADER
-#define SGEMM_GPU_HEADER
+#ifndef SGEMM_GPU_SGEMM_GPU_H
+#define SGEMM_GPU_SGEMM_GPU_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -12,4 +12,4 @@ void sgemm_gpu(int TA, int TB, int M, int N, int K, float ALPHA, float *A_gpu, i
 }
 #endif
 
-#endif // SGEMM_GPU_HEADER
+#endif // SGEMM_GPU_SGEMM_GPU_H

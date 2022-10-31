@@ -1,33 +1,10 @@
-#ifndef CUBLAS_GEMM_UTILS_H
-#define CUBLAS_GEMM_UTILS_H
+#ifndef SGEMM_GPU_CUDA_HELPER_H
+#define SGEMM_GPU_CUDA_HELPER_H
 
+#include "time_helper.h"
 #include <cuda_runtime.h>
 #include <iostream>
 #include <random>
-
-#ifdef _MSC_VER
-
-#include <Windows.h>
-
-#define SET_TIME(t0)                                                                                                   \
-    long long(t0);                                                                                                     \
-    GetSystemTimePreciseAsFileTime((LPFILETIME)(&(t0)));
-
-#define GET_DURING(t1, t0) (((double)((t1) - (t0))) / 10000.0)
-#define TO_SEED(t0) t0
-
-#else // _MSC_VER
-
-#include <sys/time.h>
-
-#define SET_TIME(t0)                                                                                                   \
-    struct timeval(t0);                                                                                                \
-    gettimeofday(&(t0), nullptr);
-
-#define GET_DURING(t1, t0) ((double)((t1).tv_sec - (t0).tv_sec) * 1000 + (double)((t1).tv_usec - (t0).tv_usec) / 1000.0)
-#define TO_SEED(t0) (t0.tv_sec * 1000 + t0.tv_usec)
-
-#endif // _MSC_VER
 
 #define CHECK_OR_REPORT_CUDA_ERROR(err, call_stat_str)                                                                 \
     do {                                                                                                               \
@@ -87,4 +64,4 @@ inline float *create_cuda_matrix(float *m, size_t num) {
     return out;
 }
 
-#endif // CUBLAS_GEMM_UTILS_H
+#endif // SGEMM_GPU_CUDA_HELPER_H
