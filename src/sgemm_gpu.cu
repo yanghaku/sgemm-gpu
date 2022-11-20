@@ -10,8 +10,8 @@
     } while (0)
 
 static __host__ always_inline void sgemm_nn_host(unsigned int M, unsigned int N, unsigned int K, float alpha,
-                                                 float *A_gpu, unsigned int lda, float *B_gpu, unsigned int ldb,
-                                                 float beta, float *C_gpu, unsigned int ldc) {
+                                                 const float *A_gpu, unsigned int lda, const float *B_gpu,
+                                                 unsigned int ldb, float beta, float *C_gpu, unsigned int ldc) {
     /*
      * ---------------------------------------------
      * |                         |             |   |
@@ -89,17 +89,21 @@ static __host__ always_inline void sgemm_nn_host(unsigned int M, unsigned int N,
 }
 
 static __host__ always_inline void sgemm_tn_host(unsigned int M, unsigned int N, unsigned int K, float alpha,
-                                                 float *A_gpu, unsigned int lda, float *B_gpu, unsigned int ldb,
-                                                 float beta, float *C_gpu, unsigned int ldc) {
+                                                 const float *A_gpu, unsigned int lda, const float *B_gpu,
+                                                 unsigned int ldb, float beta, float *C_gpu, unsigned int ldc) {
 }
 
 static __host__ always_inline void sgemm_nt_host(unsigned int M, unsigned int N, unsigned int K, float alpha,
-                                                 float *A_gpu, unsigned int lda, float *B_gpu, unsigned int ldb,
-                                                 float beta, float *C_gpu, unsigned int ldc) {
+                                                 const float *A_gpu, unsigned int lda, const float *B_gpu,
+                                                 unsigned int ldb, float beta, float *C_gpu, unsigned int ldc) {
 }
 
-extern "C" void sgemm_gpu(int TA, int TB, int M, int N, int K, float ALPHA, float *A_gpu, int lda, float *B_gpu,
-                          int ldb, float BETA, float *C_gpu, int ldc) {
+extern "C" void sgemm_gpu(int TA, int TB, int M, int N, int K, float ALPHA, const float *A_gpu, int lda,
+                          const float *B_gpu, int ldb, float BETA, float *C_gpu, int ldc) {
+    fprintf(stderr,
+            "run %s(TA=%d,TB=%d,M=%d,N=%d,K=%d,ALPHA=%f,A_GPU=%p,lda=%d,B_GPU=%p,ldb=%d,BETA=%f,C_gpu=%p,ldc=%d)\n",
+            __func__, TA, TB, M, N, K, ALPHA, A_gpu, lda, B_gpu, ldb, BETA, C_gpu, ldc);
+    return;
     if (!(M > 0 && N > 0 && K > 0 && lda > 0 && ldb > 0 && ldc > 0)) {
         return;
     }

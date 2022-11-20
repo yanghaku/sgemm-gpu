@@ -159,6 +159,24 @@ void test_nn(bool output_time = true, bool verbose = false, bool with_cpu = fals
     test_simple_nn(1024 + 64, 1024, 1024);
     test_simple_nn(2048, 2048, 2048);
     test_simple_nn(4096, 4096, 4096);
+
+#define test_custom(m, k, n, lda, ldb, ldc)                                                                            \
+    do_test(0, 0, m, k, n, lda, ldb, ldc, (m) * (lda), (k) * (ldb), (m) * (ldc), output_time, verbose, with_cpu)
+
+    test_custom(16, 27, 173056, 27, 173056, 173056);
+    test_custom(32, 144, 43264, 144, 43264, 43264);
+    test_custom(64, 288, 10816, 288, 10816, 10816);
+    test_custom(128, 576, 2704, 576, 2704, 2704);
+    test_custom(256, 1152, 676, 1152, 676, 676);
+    test_custom(512, 2304, 169, 2304, 169, 169);
+    test_custom(1024, 4608, 169, 4608, 169, 169);
+    test_custom(256, 1024, 169, 1024, 169, 169);
+    test_custom(512, 2304, 169, 2304, 169, 169);
+    test_custom(255, 512, 169, 512, 169, 169);
+    test_custom(128, 256, 169, 256, 169, 169);
+    test_custom(256, 3456, 676, 3456, 676, 676);
+    test_custom(255, 256, 676, 256, 676, 676);
+
     //    test_simple_nn(64, 2916, 363);
     //    test_simple_nn(192, 729, 1600);
     //    test_simple_nn(384, 196, 1728);
